@@ -1,0 +1,73 @@
+
+version: "3.8"
+
+services:
+  passbolt-db:
+    image: mariadb:10.3
+    container_name: passbolt-db
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "${MYSQL_HEALTHCHECK_CMD}"]
+      interval: ${MYSQL_HEALTHCHECK_INTERVAL}
+      timeout: ${MYSQL_HEALTHCHECK_TIMEOUT}
+      retries: ${MYSQL_HEALTHCHECK_RETRIES}
+    networks:
+      - passbolt_net
+
+  passbolt:
+    image: passbolt/passbolt:latest-ce
+    container_name: passbolt
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - APP_FULL_BASE_URL=${APP_FULL_BASE_URL}
+      - DATASOURCES_DEFAULT_HOST=${DATASOURCES_DEFAULT_HOST}
+      - DATASOURCES_DEFAULT_USERNAME=${DATASOURCES_DEFAULT_USERNAME}
+      - DATASOURCES_DEFAULT_PASSWORD=${DATASOURCES_DEFAULT_PASSWORD}
+      - DATASOURCES_DEFAULT_DATABASE=${DATASOURCES_DEFAULT_DATABASE}
+      - EMAIL_TRANSPORT_DEFAULT_HOST=${EMAIL_TRANSPORT_DEFAULT_HOST}
+      - EMAIL_TRANSPORT_DEFAULT_PORT=${EMAIL_TRANSPORT_DEFAULT_PORT}
+      - EMAIL_TRANSPORT_DEFAULT_USERNAME=${EMAIL_TRANSPORT_DEFAULT_USERNAME}
+      - EMAIL_TRANSPORT_DEFAULT_PASSWORD=${EMAIL_TRANSPORT_DEFAULT_PASSWORD}
+      - EMAIL_TRANSPORT_DEFAULT_TLS=${EMAIL_TRANSPORT_DEFAULT_TLS}
+      - EMAIL_DEFAULT_FROM=${EMAIL_DEFAULT_FROM}
+    depends_on:
+      passbolt-db:
+        condition: service_healthy
+    volumes:
+      - gpg_volume:/etc/passbolt/gpg
+    healthcheck:
+      test: ["CMD", "${PASSBOLT_HEALTHCHECK_CMD}"]
+      interval: ${PASSBOLT_HEALTHCHECK_INTERVAL}
+      timeout: ${PASSBOLT_HEALTHCHECK_TIMEOUT}
+      retries: ${PASSBOLT_HEALTHCHECK_RETRIES}
+    networks:
+      - passbolt_net
+
+  nginx:
+    image: nginx:alpine
+    container_name: ${NGINX_CONTAINER_NAME}
+    depends_on:
+      - passbolt
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - passbolt_net
+
+volumes:
+  db_data:
+  gpg_volume:
+
+networks:
+  passbolt_net:
+    driver: bridge
